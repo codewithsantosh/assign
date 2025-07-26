@@ -48,6 +48,7 @@ const AddTaskForm: React.FC<AddTaskFormProps> = ({ onSubmit, onCancel }) => {
     setShowEndTimePicker(false);
     if (selectedDate) setEndTime(selectedDate);
   };
+  console.log("date",date,startTime,endTime)
 
   return (
     <View style={styles.card}>

@@ -1,5 +1,4 @@
-// TodayTasksScreen.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,11 +6,14 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
+  Pressable,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
-const BASE_SLOT_HEIGHT = 30;
+const BASE_SLOT_HEIGHT = 42;
 
 const tasks = [
   {
@@ -44,7 +46,6 @@ const tasks = [
   },
 ];
 
-// Utility to generate 30-minute time slots
 const generateTimeSlots = (start: string, end: string) => {
   const slots = [];
 
@@ -82,33 +83,39 @@ const generateTimeSlots = (start: string, end: string) => {
   return slots;
 };
 
-// Get 7 days with today in the center
-const getWeekDaysAroundToday = () => {
-  const today = new Date();
+const getWeekDaysAroundToday = (centerDate: Date) => {
   const days = [];
-
   for (let i = -3; i <= 3; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + i);
+    const date = new Date(centerDate);
+    date.setDate(centerDate.getDate() + i);
 
     days.push({
-      label: date.toLocaleDateString('en-US', { weekday: 'short' }), // e.g., 'Thu'
+      label: date.toLocaleDateString('en-US', { weekday: 'short' }),
       dateNum: date.getDate(),
       isToday: i === 0,
     });
   }
-
   return days;
 };
 
 const TodayTasksScreen = ({ navigation }) => {
-  const weekDays = getWeekDaysAroundToday();
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const weekDays = getWeekDaysAroundToday(date);
+
+  const handleDateChange = (_: any, selectedDate?: Date) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      setDate(selectedDate);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity>
-          <Icon name="chevron-left" size={24} color="#000" onPress={() => navigation.goBack()} />
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Icon name="chevron-left" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.title}>Today's tasks</Text>
         <View style={styles.avatar}>
@@ -119,33 +126,40 @@ const TodayTasksScreen = ({ navigation }) => {
       <View style={styles.dateSection}>
         <View style={{ gap: 10 }}>
           <Text style={styles.date}>
-            {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            {date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
           </Text>
-          <Text style={styles.taskCount}>10 task today</Text>
+          <Text style={styles.taskCount}>10 tasks today</Text>
         </View>
         <View style={styles.calendarIcon}>
-          <Image source={require('../assets/Frame1.png')} style={styles.avatar} />
+          <Pressable onPress={() => setShowDatePicker(true)}>
+            <Image source={require('../assets/Frame1.png')} style={styles.avatar} />
+          </Pressable>
+          {showDatePicker && (
+            <DateTimePicker value={date} mode="date" display="default" onChange={handleDateChange} />
+          )}
         </View>
       </View>
 
       <View style={styles.dayScroll}>
         {weekDays.map((day, index) => (
-          <View key={index} style={[styles.day, day.isToday && styles.today]}>
+          <Pressable key={index} style={[styles.day, day.isToday && styles.today]}onPress={()=>{
+            console.log(`Clicked date: ${day.dateNum}`);
+          }}>
             <Text style={[styles.dayNum, day.isToday && styles.todayText]}>
               {String(day.dateNum).padStart(2, '0')}
             </Text>
             <Text style={[styles.dayLabel, day.isToday && styles.todayText]}>
               {day.label}
             </Text>
-          </View>
+          </Pressable>
         ))}
       </View>
 
+      {/* Tasks */}
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {tasks.map((task, index) => {
           const slots = generateTimeSlots(task.time, task.endTime || task.time);
-          const dynamicHeight = Math.max(BASE_SLOT_HEIGHT * slots.length, 127);
-
+          const dynamicHeight = Math.max(BASE_SLOT_HEIGHT * slots.length, 107);
           return (
             <View key={index} style={styles.cardContainer}>
               <View style={{ flexDirection: 'column', justifyContent: 'space-around', alignItems: 'center', height: dynamicHeight }}>
@@ -169,6 +183,7 @@ const TodayTasksScreen = ({ navigation }) => {
     </SafeAreaView>
   );
 };
+
 
 export default TodayTasksScreen;
 
@@ -271,7 +286,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   taskTime: {
     marginBottom: 4,
