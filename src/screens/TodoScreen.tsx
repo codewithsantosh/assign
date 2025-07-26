@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,201 +17,263 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedCircularProgress } from 'react-native-circular-progress';
 import Icon from 'react-native-vector-icons/Feather';
-import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  Swipeable,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
 import AddTaskForm from '../components/AddTaskForm';
 import { useTodos } from '../hooks/useTodos';
 import uuid from 'react-native-uuid';
 
+// Move static data outside component to prevent recreation
+const CATEGORIES = [
+  {
+    id: '1',
+    title: 'Gardening',
+    subtitle: '02 Tasks',
+    image: require('../assets/Group.png'),
+    backgroundColor: '#FDE8C9',
+  },
+  {
+    id: '2',
+    title: 'Mobile App',
+    subtitle: '05 Tasks',
+    image: require('../assets/Group1.png'),
+    backgroundColor: '#E0EBDD',
+  },
+  {
+    id: '3',
+    title: 'Gardening',
+    subtitle: '02 Tasks',
+    image: require('../assets/Group.png'),
+    backgroundColor: '#ECDFE9',
+  },
+];
+
+const FALLBACK_TASKS = [
+  {
+    id: '1',
+    title: 'Design Review Meeting',
+    subtitle: 'Team members',
+    progress: 46,
+    badge: '6d',
+    time: '2:30 PM - 7:00PM',
+    backgroundColor: '#ECDFE9',
+  },
+  {
+    id: '2',
+    title: 'Dashboard & Mobile App',
+    subtitle: 'Team members',
+    badge: '4d',
+    progress: 46,
+    time: '2:30 PM - 7:00PM',
+    backgroundColor: '#EDEBDE',
+  },
+];
+
 const TodoScreen = ({ navigation }) => {
-  const [isAddTask, stIsAddTask] = useState(false);
-  const [taskDatas, setTaskDatas] = useState([]);
+  const [isAddTask, setIsAddTask] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const { todos, isLoading, error, createTodo, deleteTodo, isCreating } = useTodos();
+  
+  const {
+    todos,
+    isLoading,
+    error,
+    refetch,
+    createTodo,
+    updateTodo,
+    deleteTodo,
+    isCreating,
+    isUpdating,
+    isDeleting,
+    isSyncing,
+    pendingChanges,
+    isOnline,
+  } = useTodos();
 
-  console.log("todo data", todos, error, isLoading);
+  console.log('Todo hook state:', {
+    todosCount: todos?.length,
+    isLoading,
+    error,
+    isCreating,
+    isDeleting,
+    isOnline,
+    pendingChanges: pendingChanges?.length
+  });
 
-  useEffect(() => {
-    fetchApi();
-  }, []);
-
-  const formatTimeRange = (start, end) => {
-    const format = (dateStr) => {
+  // Memoize time formatting function
+  const formatTimeRange = useCallback((start, end) => {
+    const format = dateStr => {
       const d = new Date(dateStr);
       return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     };
     return `${format(start)} - ${format(end)}`;
-  };
+  }, []);
 
-  const fetchApi = async () => {
-    try {
-      const res = await fetch("https://mock-server-58ta.onrender.com/123e4567-e89b-12d3-a456-426614174000");
-      const data = await res.json();
-      const filteredTasks = data.filter((task) => task.taskName === "santosh123");
-      const transformed = filteredTasks.map((item, index) => ({
-        id: item._id ?? `${index}`,
-        title: item.title ?? item.taskName ?? "Untitled Task",
-        subtitle: item.teamMembers ? `Team: ${item.teamMembers}` : "No team assigned",
-        progress: 46,
-        badge: '6d',
-        time: formatTimeRange(item.startTime, item.endTime),
-        backgroundColor: '#ECDFE9',
-      }));
-      console.log("Fetched tasks:", filteredTasks);
-      setTaskDatas(transformed);
-    } catch (error) {
-      console.error("Fetch error:", error);
-    }
-  };
+  // Memoize filtered and transformed tasks
+  const taskDatas = useMemo(() => {
+    if (!todos?.length) return [];
+    
+    const filteredTasks = todos.filter(task => task.taskName === 'santosh123');
+    
+    return filteredTasks.map((item, index) => ({
+      id: item._id ?? item.id ?? `${index}`,
+      originalId: item._id ?? item.id,
+      title: item.title ?? item.taskName ?? 'Untitled Task',
+      subtitle: item.teamMembers
+        ? `Team: ${item.teamMembers}`
+        : 'No team assigned',
+      progress: 46,
+      badge: '6d',
+      time: formatTimeRange(item.startTime, item.endTime),
+      backgroundColor: '#ECDFE9',
+    }));
+  }, [todos, formatTimeRange]);
 
+  // Refresh handler using refetch
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await fetchApi();
+      await refetch();
     } catch (error) {
-      console.error("Refresh error:", error);
+      console.error('Refresh error:', error);
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [refetch]);
 
-  const handleDeleteTask = (taskId, taskTitle) => {
+  // Enhanced delete handler
+  const handleDeleteTask = useCallback(async (taskId, taskTitle) => {
     Alert.alert(
-      "Delete Task",
+      'Delete Task',
       `Are you sure you want to delete "${taskTitle}"?`,
       [
         {
-          text: "Cancel",
-          style: "cancel"
+          text: 'Cancel',
+          style: 'cancel',
         },
         {
-          text: "Delete",
-          style: "destructive",
+          text: 'Delete',
+          style: 'destructive',
           onPress: async () => {
             try {
-              setTaskDatas(prev => prev.filter(task => task.id !== taskId));
+              console.log('Deleting task with ID:', taskId);
               
-              if (deleteTodo) {
-                await deleteTodo(taskId);
+              // Find the task to get the original ID
+              const taskToDelete = taskDatas.find(task => task.id === taskId);
+              const originalId = taskToDelete?.originalId || taskId;
+              
+              console.log('Original ID for deletion:', originalId);
+              
+              // Call the delete API - this should handle optimistic updates internally
+              if (deleteTodo && originalId) {
+                await deleteTodo(originalId);
+                console.log('Task deleted successfully');
               }
               
-              await fetchApi();
             } catch (error) {
-              console.error("Delete error:", error);
-              await fetchApi();
+              console.error('Delete error:', error);
+              
+              // Show error alert
+              Alert.alert(
+                'Delete Failed',
+                'Failed to delete the task. Please try again.',
+                [{ text: 'OK' }]
+              );
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
-  };
+  }, [deleteTodo, taskDatas]);
 
-  const renderDeleteAction = (taskId: any, taskTitle: any) => {
+  // Memoized delete action renderer
+  const renderDeleteAction = useCallback((taskId, taskTitle) => {
     return (
       <Animated.View style={styles.deleteAction}>
         <TouchableOpacity
           style={styles.deleteButton}
           onPress={() => handleDeleteTask(taskId, taskTitle)}
+          disabled={isDeleting} // Disable while deleting
         >
           <Icon name="trash-2" size={24} color="#fff" />
-          <Text style={styles.deleteText}>Delete</Text>
+          <Text style={styles.deleteText}>
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </Text>
         </TouchableOpacity>
       </Animated.View>
     );
-  };
+  }, [handleDeleteTask, isDeleting]);
 
-  const categories = [
-    {
-      id: '1',
-      title: 'Gardening',
-      subtitle: '02 Tasks',
-      image: require('../assets/Group.png'),
-      backgroundColor: '#FDE8C9',
-    },
-    {
-      id: '2',
-      title: 'Mobile App',
-      subtitle: '05 Tasks',
-      image: require('../assets/Group1.png'),
-      backgroundColor: '#E0EBDD',
-    },
-    {
-      id: '3',
-      title: 'Gardening',
-      subtitle: '02 Tasks',
-      image: require('../assets/Group.png'),
-      backgroundColor: '#ECDFE9',
-    },
-  ];
+  // Optimized add task handler
+  const handleAddTask = useCallback(() => {
+    setIsAddTask(true);
+  }, []);
 
-  const taskData = [
-    {
-      id: '1',
-      title: 'Design Review Meeting',
-      subtitle: 'Team members',
-      progress: 46,
-      badge: '6d',
-      time: '2:30 PM - 7:00PM',
-      backgroundColor: '#ECDFE9',
-    },
-    {
-      id: '2',
-      title: 'Dashboard & Mobile App',
-      subtitle: 'Team members',
-      badge: '4d',
-      progress: 46,
-      time: '2:30 PM - 7:00PM',
-      backgroundColor: '#EDEBDE',
-    },
-  ];
-
-  const handleAddTask = () => {
-    stIsAddTask(true);
-  };
-
-  const handleSubmit = (data) => {
+  // Enhanced submit handler
+  const handleSubmit = useCallback(async (data) => {
     try {
       const { taskName, description, teamMembers, date, startTime, endTime } = data;
-      console.log("data", data);
-      const id = uuid.v4();
       
-      createTodo({
-        id: id,
-        taskName: 'santosh123',
+      const newTaskId = uuid.v4();
+      const newTask = {
+        id: newTaskId,
+        _id: newTaskId,
+        taskName: "santosh123",
         title: taskName,
-        description: description,
-        teamMembers: teamMembers,
+        description,
+        teamMembers,
         completed: false,
         createdAt: new Date(date).toISOString(),
         updatedAt: new Date().toISOString(),
         date: date.toISOString(),
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-      });
-      
-      stIsAddTask(false);
-      // Refresh data after adding
-      setTimeout(() => fetchApi(), 1000);
-    } catch (error) {
-      console.error("error", error);
-    }
-  };
+      };
 
-  const renderCategory = ({ item }) => (
-    <TouchableOpacity style={[styles.categoryCard, { backgroundColor: item.backgroundColor }]}>
+      console.log('Creating new task:', newTask);
+      await createTodo(newTask);
+      setIsAddTask(false);
+      
+    } catch (error) {
+      console.error('Submit error:', error);
+      Alert.alert(
+        'Create Failed',
+        'Failed to create the task. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  }, [createTodo]);
+
+  // Memoized category renderer
+  const renderCategory = useCallback(({ item }) => (
+    <TouchableOpacity
+      style={[styles.categoryCard, { backgroundColor: item.backgroundColor }]}
+    >
       <Text style={styles.categoryTitle}>{item.title}</Text>
       <Text style={styles.categorySubtitle}>{item.subtitle}</Text>
       <View style={styles.categoryIllustration}>
         <Image source={item.image} style={styles.illustrationImage} />
       </View>
     </TouchableOpacity>
-  );
+  ), []);
 
-  const renderTask = ({ item }) => (
+  // Memoized task renderer
+  const renderTask = useCallback(({ item, index }) => (
     <Swipeable
+      key={item.id}
       renderRightActions={() => renderDeleteAction(item.id, item.title)}
       rightThreshold={40}
     >
-      <View style={[styles.taskCard, { backgroundColor: item.backgroundColor }]}>
+      <View
+        style={[
+          styles.taskCard,
+          { 
+            backgroundColor: index % 2 === 0 ? '#ECDFE9' : '#EDEBDE',
+            opacity: isDeleting ? 0.6 : 1 // Visual feedback during deletion
+          },
+        ]}
+      >
         <View style={styles.taskHeader}>
           <Text style={styles.taskTitle}>{item.title}</Text>
           {item.badge && (
@@ -222,9 +284,18 @@ const TodoScreen = ({ navigation }) => {
         </View>
         <Text style={styles.taskSubtitle}>{item.subtitle}</Text>
         <View style={styles.teamAvatars}>
-          <Image source={require('../assets/Frame.png')} style={styles.teamAvatar} />
-          <Image source={require('../assets/Frame.png')} style={[styles.teamAvatar, styles.teamAvatarOverlap]} />
-          <Image source={require('../assets/Frame.png')} style={[styles.teamAvatar, styles.teamAvatarOverlap]} />
+          <Image
+            source={require('../assets/Frame.png')}
+            style={styles.teamAvatar}
+          />
+          <Image
+            source={require('../assets/Frame.png')}
+            style={[styles.teamAvatar, styles.teamAvatarOverlap]}
+          />
+          <Image
+            source={require('../assets/Frame.png')}
+            style={[styles.teamAvatar, styles.teamAvatarOverlap]}
+          />
         </View>
         {item.progress !== undefined && (
           <View style={styles.taskFooter}>
@@ -237,18 +308,56 @@ const TodoScreen = ({ navigation }) => {
                 backgroundColor="#ddd"
                 rotation={0}
               >
-                {() => <Text style={styles.circularProgressText}>{item.progress}%</Text>}
+                {() => (
+                  <Text style={styles.circularProgressText}>
+                    {item.progress}%
+                  </Text>
+                )}
               </AnimatedCircularProgress>
             </View>
             <View style={styles.timeContainer}>
-              <Image source={require('../assets/clock-01.png')} style={styles.timeIndicator} />
+              <Image
+                source={require('../assets/clock-01.png')}
+                style={styles.timeIndicator}
+              />
               <Text style={styles.timeText}>{item.time}</Text>
             </View>
           </View>
         )}
       </View>
     </Swipeable>
-  );
+  ), [renderDeleteAction, isDeleting]);
+
+  // Memoized task count text
+  const taskCountText = useMemo(() => {
+    const count = taskDatas.length;
+    return count > 0 
+      ? `${count} task${count !== 1 ? 's' : ''} pending`
+      : '06 task pending';
+  }, [taskDatas.length]);
+
+  // Memoized navigation handler
+  const navigateToDetails = useCallback(() => {
+    navigation.navigate('TodoDetails');
+  }, [navigation]);
+
+  // Memoized modal close handler
+  const closeModal = useCallback(() => {
+    setIsAddTask(false);
+  }, []);
+
+  // Show loading state
+  if (isLoading && !taskDatas.length) {
+    return (
+      <GestureHandlerRootView style={styles.container}>
+        <SafeAreaView style={styles.container}>
+          <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+            <Text style={styles.loadingText}>Loading tasks...</Text>
+          </View>
+        </SafeAreaView>
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={styles.container}>
@@ -259,22 +368,27 @@ const TodoScreen = ({ navigation }) => {
           <View style={styles.headerLeft}>
             <Text style={styles.greeting}>Hi Saad Shaikh</Text>
             <Text style={styles.subtitle}>
-              {taskDatas.length > 0 ? `${taskDatas.length} task${taskDatas.length !== 1 ? 's' : ''} pending` : '06 task pending'}
+              {taskCountText}
+              {!isOnline && ' (Offline)'}
+              {pendingChanges?.length > 0 && ` • ${pendingChanges.length} pending sync`}
             </Text>
           </View>
           <View style={styles.avatar}>
-            <Image source={require('../assets/profile.png')} style={styles.avatarImage} />
+            <Image
+              source={require('../assets/profile.png')}
+              style={styles.avatarImage}
+            />
           </View>
         </View>
 
-        <ScrollView 
+        <ScrollView
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
+              refreshing={refreshing || isLoading}
               onRefresh={onRefresh}
-              colors={['#000']} // Android
-              tintColor="#000" // iOS
+              colors={['#000']}
+              tintColor="#000"
             />
           }
         >
@@ -299,35 +413,40 @@ const TodoScreen = ({ navigation }) => {
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>Categories</Text>
             <FlatList
-              data={categories}
+              data={CATEGORIES}
               renderItem={renderCategory}
-              keyExtractor={(item) => item.id}
+              keyExtractor={item => item.id}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: 10 }}
             />
           </View>
 
-          <View style={styles.sectionContainer}>
+          <View style={styles.sectionContainer1}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Ongoing tasks</Text>
-              <TouchableOpacity onPress={() => navigation.navigate('TodoDetails')}>
+              <TouchableOpacity onPress={navigateToDetails}>
                 <Text style={styles.seeAllText}>See all</Text>
               </TouchableOpacity>
             </View>
             
-            {/* {refreshing && (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Refreshing tasks...</Text>
+            {error && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>Error loading tasks: {error.message}</Text>
+                <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
               </View>
-            )} */}
+            )}
             
             <FlatList
-              data={taskDatas.length > 0 ? taskDatas : taskData}
-              keyExtractor={(item) => item.id}
+              data={taskDatas.length > 0 ? taskDatas : FALLBACK_TASKS}
+              keyExtractor={item => item.id}
               renderItem={renderTask}
               scrollEnabled={false}
-              extraData={taskDatas} // Ensure re-render when data changes
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={10}
+              windowSize={10}
             />
           </View>
         </ScrollView>
@@ -335,20 +454,22 @@ const TodoScreen = ({ navigation }) => {
         <Modal
           visible={isAddTask}
           animationType="slide"
-          onRequestClose={() => stIsAddTask(false)}
+          onRequestClose={closeModal}
         >
           <View style={styles.modalOverlay}>
             <AddTaskForm
-              onSubmit={(data) => {
-                console.log('Task submitted:', data);
-                handleSubmit(data);
-              }}
-              onCancel={() => stIsAddTask(false)}
+              onSubmit={handleSubmit}
+              onCancel={closeModal}
+              isLoading={isCreating}
             />
           </View>
         </Modal>
 
-        <TouchableOpacity style={styles.fab} onPress={() => handleAddTask()}>
+        <TouchableOpacity 
+          style={[styles.fab, { opacity: isCreating ? 0.6 : 1 }]} 
+          onPress={handleAddTask}
+          disabled={isCreating}
+        >
           <Icon name="plus" size={24} color="#fff" />
         </TouchableOpacity>
       </SafeAreaView>
@@ -356,6 +477,7 @@ const TodoScreen = ({ navigation }) => {
   );
 };
 
+// Enhanced styles with error handling
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -429,6 +551,10 @@ const styles = StyleSheet.create({
     height: 58,
   },
   sectionContainer: {
+    paddingLeft: 29,
+    marginBottom: 24,
+  },
+  sectionContainer1: {
     paddingHorizontal: 29,
     marginBottom: 24,
   },
@@ -439,7 +565,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     letterSpacing: 0.8,
     color: '##303642',
-    paddingBottom:16
+    paddingBottom: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -453,16 +579,40 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     lineHeight: 15.6,
     letterSpacing: 0,
-    color: '#727272'
+    color: '#727272',
   },
   loadingContainer: {
     padding: 16,
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#888',
     fontStyle: 'italic',
+  },
+  errorContainer: {
+    backgroundColor: '#ffebee',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 14,
+    color: '#c62828',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  retryButton: {
+    backgroundColor: '#c62828',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 4,
+  },
+  retryText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '500',
   },
   categoryCard: {
     borderRadius: 20,
@@ -531,7 +681,7 @@ const styles = StyleSheet.create({
     lineHeight: 15.6,
     letterSpacing: 0,
     color: '#9B9B9B',
-    paddingBottom:16
+    paddingBottom: 16,
   },
   teamAvatars: {
     flexDirection: 'row',
