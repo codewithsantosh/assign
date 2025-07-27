@@ -41,19 +41,14 @@ interface Task {
   teamMembers?: string
 }
 
-const generateTimeSlots = (start: string, end: string, taskDate: string) => {
+const generateTimeSlots = (start: string, end: string) => {
   const slots = []
-  const toDate = (timeString: string) => {
-    const parts = timeString.replace(/\u202F/g, " ").split(/\s+/)
-    const timePart = parts[0]
-    const modifier = parts[1]
-
-    let [hours, minutes] = timePart.split(":").map(Number)
-
+  const toDate = (time: string) => {
+    const [timeStr, modifier] = time.split(" ")
+    let [hours, minutes] = timeStr.split(":").map(Number)
     if (modifier === "PM" && hours < 12) hours += 12
     if (modifier === "AM" && hours === 12) hours = 0
-
-    const date = new Date(taskDate) 
+    const date = new Date()
     date.setHours(hours)
     date.setMinutes(minutes)
     date.setSeconds(0)
@@ -117,6 +112,7 @@ const TodayTasksScreen = ({ navigation }) => {
 
   const weekDays = getWeekDaysAroundToday(date)
 
+  // Load tasks when date changes
   useEffect(() => {
     loadTasksForDate(date)
   }, [date, loadTasksForDate])
@@ -180,15 +176,6 @@ ${task.description || "No description"}`,
     [deleteTask],
   )
 
-  const formatTimeForStorage = useCallback((time: Date) => {
-    const hours = time.getHours()
-    const minutes = time.getMinutes()
-    const ampm = hours >= 12 ? "PM" : "AM"
-    const hr = hours % 12 || 12
-    const min = minutes.toString().padStart(2, "0")
-    return `${hr}:${min} ${ampm}`
-  }, [])
-
   const handleAddTaskSubmit = useCallback(
     async (data: {
       taskName: string
@@ -201,8 +188,8 @@ ${task.description || "No description"}`,
       try {
         const { taskName, description, teamMembers, date: taskDate, startTime, endTime } = data
 
-        const formattedStartTime = formatTimeForStorage(startTime)
-        const formattedEndTime = formatTimeForStorage(endTime)
+        const formattedStartTime = startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        const formattedEndTime = endTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 
         const newTask = {
           time: formattedStartTime,
@@ -226,7 +213,7 @@ ${task.description || "No description"}`,
         Alert.alert("Error", "Failed to create task. Please try again.")
       }
     },
-    [createTask, formatTimeForStorage],
+    [createTask],
   )
 
   const handleAddTaskCancel = useCallback(() => {
@@ -287,7 +274,6 @@ ${task.description || "No description"}`,
           >
             <Text style={[styles.dayNum, day.isToday && styles.todayText]}>{String(day.dateNum).padStart(2, "0")}</Text>
             <Text style={[styles.dayLabel, day.isToday && styles.todayText]}>{day.label}</Text>
-            <View style={styles.plots} />
           </Pressable>
         ))}
       </View>
@@ -322,7 +308,7 @@ ${task.description || "No description"}`,
           </View>
         ) : (
           tasks.map((task, index) => {
-            const slots = generateTimeSlots(task.time, task.endTime || task.time, task.date)
+            const slots = generateTimeSlots(task.time, task.endTime || task.time)
             const dynamicHeight = Math.max(BASE_SLOT_HEIGHT * slots.length, 107)
 
             return (
@@ -337,7 +323,7 @@ ${task.description || "No description"}`,
                     flexDirection: "column",
                     justifyContent: "space-around",
                     alignItems: "center",
-                    height: dynamicHeight,
+                    // height: dynamicHeight,
                     minWidth: 80,
                   }}
                 >
@@ -476,7 +462,6 @@ const styles = StyleSheet.create({
     lineHeight: 16.8,
     letterSpacing: -0.28,
     textAlign: "center",
-    color:'#9B9B9B'
   },
   dayLabel: {
     fontFamily: "FilsonPro-Regular",
@@ -485,17 +470,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 13.2,
     letterSpacing: 0,
-    color:'#9B9B9B'
-  },
-  plots: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ffffff'
   },
   today: {
     backgroundColor: "#000",
-    borderRadius: 40,
+    borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 5,
   },
@@ -512,14 +490,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   taskTime: {
-    fontFamily: 'Filson Pro',
-    fontWeight: '400',
-    fontStyle: 'normal',
-    fontSize: 12,
-    lineHeight: 14.4,
-    letterSpacing: 0,
-    textAlign: 'center',
-    color:'#9B9B9B'
+    marginBottom: 4,
+    color: "#777",
+    fontSize: 13,
   },
   taskCard: {
     width: 261,

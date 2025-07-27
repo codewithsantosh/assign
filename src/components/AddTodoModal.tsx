@@ -1,131 +1,194 @@
-"use client"
-
 import type React from "react"
-import { useState, useEffect } from "react"
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Modal,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  ScrollView,
-} from "react-native"
-import Icon from "react-native-vector-icons/Ionicons"
-import type { Todo } from "../types"
-import { COLORS } from "../config/constants"
+import { useState, useCallback } from "react"
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Platform } from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
+import DateTimePicker from "@react-native-community/datetimepicker"
+import Icon from "react-native-vector-icons/Feather"
 
-interface AddTodoModalProps {
-  visible: boolean
-  onClose: () => void
-  onSave: (todo: Omit<Todo, "id" | "_id" | "synced" | "pendingAction">) => void
-  editingTodo?: Todo | null
-  onUpdate?: (id: string, updates: Partial<Todo>) => void
+interface AddTaskFormProps {
+  onSubmit: (data: {
+    taskName: string
+    description: string
+    teamMembers: string
+    date: Date
+    startTime: Date
+    endTime: Date
+  }) => Promise<void>
+  onCancel: () => void
+  isLoading: boolean
 }
 
-export const AddTodoModal: React.FC<AddTodoModalProps> = ({ visible, onClose, onSave, editingTodo, onUpdate }) => {
-  const [title, setTitle] = useState("")
+const AddTaskForm: React.FC<AddTaskFormProps> = ({ onSubmit, onCancel, isLoading }) => {
+  const [taskName, setTaskName] = useState("")
   const [description, setDescription] = useState("")
+  const [teamMembers, setTeamMembers] = useState("")
+  const [date, setDate] = useState(new Date())
+  const [startTime, setStartTime] = useState(new Date())
+  const [endTime, setEndTime] = useState(new Date())
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false)
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false)
 
-  useEffect(() => {
-    if (editingTodo) {
-      setTitle(editingTodo.title)
-      setDescription(editingTodo.description || "")
-    } else {
-      setTitle("")
-      setDescription("")
-    }
-  }, [editingTodo, visible])
-
-  const handleSave = () => {
-    if (!title.trim()) {
-      Alert.alert("Error", "Please enter a title for your todo")
+  const handleSubmit = useCallback(async () => {
+    if (!taskName.trim()) {
+      Alert.alert("Validation Error", "Please enter a task name")
       return
     }
 
-    const now = new Date().toISOString()
-
-    if (editingTodo && onUpdate) {
-      onUpdate(editingTodo.id, {
-        title: title.trim(),
-        description: description.trim() || undefined,
-        updatedAt: now,
-      })
-    } else {
-      onSave({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        completed: false,
-        createdAt: now,
-        updatedAt: now,
-      })
+    if (!description.trim()) {
+      Alert.alert("Validation Error", "Please enter a description")
+      return
     }
 
-    onClose()
+    if (startTime >= endTime) {
+      Alert.alert("Validation Error", "End time must be after start time")
+      return
+    }
+
+    try {
+      await onSubmit({
+        taskName,
+        description,
+        teamMembers,
+        date,
+        startTime,
+        endTime,
+      })
+    } catch (error) {
+      console.error("Form submission error:", error)
+    }
+  }, [taskName, description, teamMembers, date, startTime, endTime, onSubmit])
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString()
   }
 
-  const handleClose = () => {
-    setTitle("")
-    setDescription("")
-    onClose()
+  const formatTime = (time: Date) => {
+    return time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(Platform.OS === "ios")
+    if (selectedDate) {
+      setDate(selectedDate)
+    }
+  }
+
+  const onStartTimeChange = (event: any, selectedTime?: Date) => {
+    setShowStartTimePicker(Platform.OS === "ios")
+    if (selectedTime) {
+      setStartTime(selectedTime)
+    }
+  }
+
+  const onEndTimeChange = (event: any, selectedTime?: Date) => {
+    setShowEndTimePicker(Platform.OS === "ios")
+    if (selectedTime) {
+      setEndTime(selectedTime)
+    }
   }
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
-            <Icon name="close" size={24} color={COLORS.textSecondary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{editingTodo ? "Edit Task" : "New Task"}</Text>
-          <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Save</Text>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onCancel} style={styles.cancelButton}>
+          <Icon name="x" size={24} color="#000" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Add New Task</Text>
+        <View style={styles.placeholder} />
+      </View>
+
+      <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Task Name</Text>
+          <TextInput
+            style={styles.input}
+            value={taskName}
+            onChangeText={setTaskName}
+            placeholder="Enter task name"
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Description</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={description}
+            onChangeText={setDescription}
+            placeholder="Enter task description"
+            placeholderTextColor="#999"
+            multiline
+            numberOfLines={4}
+            textAlignVertical="top"
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Team Members</Text>
+          <TextInput
+            style={styles.input}
+            value={teamMembers}
+            onChangeText={setTeamMembers}
+            placeholder="Enter team member names"
+            placeholderTextColor="#999"
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Date</Text>
+          <TouchableOpacity style={styles.dateTimeButton} onPress={() => setShowDatePicker(true)}>
+            <Text style={styles.dateTimeText}>{formatDate(date)}</Text>
+            <Icon name="calendar" size={20} color="#666" />
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.form}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Title</Text>
-              <TextInput
-                style={styles.titleInput}
-                value={title}
-                onChangeText={setTitle}
-                placeholder="What needs to be done?"
-                placeholderTextColor={COLORS.textLight}
-                autoFocus
-                returnKeyType="next"
-                multiline
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Description</Text>
-              <TextInput
-                style={styles.descriptionInput}
-                value={description}
-                onChangeText={setDescription}
-                placeholder="Add more details..."
-                placeholderTextColor={COLORS.textLight}
-                multiline
-                numberOfLines={6}
-                textAlignVertical="top"
-              />
-            </View>
+        <View style={styles.timeRow}>
+          <View style={[styles.inputGroup, styles.timeInput]}>
+            <Text style={styles.label}>Start Time</Text>
+            <TouchableOpacity style={styles.dateTimeButton} onPress={() => setShowStartTimePicker(true)}>
+              <Text style={styles.dateTimeText}>{formatTime(startTime)}</Text>
+              <Icon name="clock" size={20} color="#666" />
+            </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </Modal>
+
+          <View style={[styles.inputGroup, styles.timeInput]}>
+            <Text style={styles.label}>End Time</Text>
+            <TouchableOpacity style={styles.dateTimeButton} onPress={() => setShowEndTimePicker(true)}>
+              <Text style={styles.dateTimeText}>{formatTime(endTime)}</Text>
+              <Icon name="clock" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {showDatePicker && <DateTimePicker value={date} mode="date" display="default" onChange={onDateChange} />}
+
+        {showStartTimePicker && (
+          <DateTimePicker value={startTime} mode="time" display="default" onChange={onStartTimeChange} />
+        )}
+
+        {showEndTimePicker && (
+          <DateTimePicker value={endTime} mode="time" display="default" onChange={onEndTimeChange} />
+        )}
+      </ScrollView>
+
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity
+          style={[styles.submitButton, { opacity: isLoading ? 0.6 : 1 }]}
+          onPress={handleSubmit}
+          disabled={isLoading}
+        >
+          <Text style={styles.submitButtonText}>{isLoading ? "Creating..." : "Create Task"}</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: "#fff",
   },
   header: {
     flexDirection: "row",
@@ -133,66 +196,88 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
+    borderBottomColor: "#f0f0f0",
   },
-  headerButton: {
+  cancelButton: {
     padding: 8,
-    borderRadius: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: COLORS.text,
+    color: "#000",
   },
-  saveButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-  },
-  saveButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  content: {
-    flex: 1,
+  placeholder: {
+    width: 40,
   },
   form: {
-    padding: 20,
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
   inputGroup: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   label: {
     fontSize: 16,
+    fontWeight: "500",
+    color: "#333",
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#000",
+    backgroundColor: "#f9f9f9",
+  },
+  textArea: {
+    height: 100,
+    paddingTop: 12,
+  },
+  dateTimeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#f9f9f9",
+  },
+  dateTimeText: {
+    fontSize: 16,
+    color: "#000",
+  },
+  timeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  timeInput: {
+    flex: 1,
+  },
+  buttonContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  submitButton: {
+    backgroundColor: "#000",
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  submitButtonText: {
+    color: "#fff",
+    fontSize: 16,
     fontWeight: "600",
-    color: COLORS.text,
-    marginBottom: 12,
-  },
-  titleInput: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 16,
-    padding: 16,
-    fontSize: 16,
-    color: COLORS.text,
-    backgroundColor: COLORS.surface,
-    minHeight: 56,
-    textAlignVertical: "top",
-  },
-  descriptionInput: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 16,
-    padding: 16,
-    fontSize: 16,
-    color: COLORS.text,
-    backgroundColor: COLORS.surface,
-    height: 120,
-    textAlignVertical: "top",
   },
 })
-//8095031111
+
+export default AddTaskForm

@@ -8,10 +8,10 @@ export const STORAGE_KEYS = {
 } as const
 
 export const COLORS = {
-  primary: "#6366F1", // Indigo
+  primary: "#6366F1", 
   primaryLight: "#A5B4FC",
-  secondary: "#10B981", // Emerald
-  accent: "#F59E0B", // Amber
+  secondary: "#10B981", 
+  accent: "#F59E0B", 
   background: "#FAFAFA",
   surface: "#FFFFFF",
   surfaceSecondary: "#F8FAFC",
@@ -25,3 +25,51 @@ export const COLORS = {
   error: "#EF4444",
   shadow: "rgba(0, 0, 0, 0.1)",
 } as const
+
+export const CATEGORIES = [
+  {
+    id: '1',
+    title: 'Gardening',
+    subtitle: '02 Tasks',
+    image: require('../assets/Group.png'),
+    backgroundColor: '#FDE8C9',
+  },
+  {
+    id: '2',
+    title: 'Mobile App',
+    subtitle: '05 Tasks',
+    image: require('../assets/Group1.png'),
+    backgroundColor: '#E0EBDD',
+  },
+  {
+    id: '3',
+    title: 'Gardening',
+    subtitle: '02 Tasks',
+    image: require('../assets/Group.png'),
+    backgroundColor: '#ECDFE9',
+  },
+];
+
+
+export const FALLBACK_TASKS = [
+  {
+    id: '1',
+    title: 'Design Review Meeting',
+    subtitle: 'Team members',
+    progress: 46,
+    badge: '6d',
+    time: '2:30 PM - 7:00PM',
+    backgroundColor: '#ECDFE9',
+  },
+  {
+    id: '2',
+    title: 'Dashboard & Mobile App',
+    subtitle: 'Team members',
+    badge: '4d',
+    progress: 46,
+    time: '2:30 PM - 7:00PM',
+    backgroundColor: '#EDEBDE',
+  },
+];
+
+

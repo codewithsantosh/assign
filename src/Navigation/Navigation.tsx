@@ -6,7 +6,7 @@ import TodoDetailsScreen from '../screens/TodoDetailsScreen';
 
 export type RootStackParamList = {
     Todo: undefined;
-    TodoDetails: undefined // example param for Details screen
+    TodoDetails: undefined 
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
